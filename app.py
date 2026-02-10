@@ -1,8 +1,11 @@
 import os
 from datetime import datetime, date, time, timedelta
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from functools import wraps
+
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///reservierungen.db"
@@ -11,7 +14,22 @@ app.secret_key = os.urandom(24)
 
 db = SQLAlchemy(app)
 
+# Admin-Passwort (beim ersten Start ändern!)
+ADMIN_PASSWORT_HASH = generate_password_hash(os.environ.get("ADMIN_PASSWORT", "admin123"))
+
 SLOT_DURATION_HOURS = 2
+
+
+def admin_erforderlich(f):
+    """Decorator: Prüft ob der Admin eingeloggt ist."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("admin_eingeloggt"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Nicht autorisiert"}), 401
+            return redirect(url_for("admin_login"))
+        return f(*args, **kwargs)
+    return decorated
 
 # --- Datenmodell ---
 
@@ -220,12 +238,37 @@ def api_reservieren():
 # --- Routen: Admin ---
 
 
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if session.get("admin_eingeloggt"):
+        return redirect(url_for("admin"))
+
+    fehler = None
+    if request.method == "POST":
+        passwort = request.form.get("passwort", "")
+        if check_password_hash(ADMIN_PASSWORT_HASH, passwort):
+            session["admin_eingeloggt"] = True
+            return redirect(url_for("admin"))
+        else:
+            fehler = "Falsches Passwort."
+
+    return render_template("admin_login.html", fehler=fehler)
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin_eingeloggt", None)
+    return redirect(url_for("index"))
+
+
 @app.route("/admin")
+@admin_erforderlich
 def admin():
     return render_template("admin.html")
 
 
 @app.route("/api/admin/oeffnungszeiten", methods=["GET"])
+@admin_erforderlich
 def api_oeffnungszeiten():
     alle = Oeffnungszeit.query.order_by(Oeffnungszeit.wochentag).all()
     return jsonify([
@@ -242,6 +285,7 @@ def api_oeffnungszeiten():
 
 
 @app.route("/api/admin/oeffnungszeiten/<int:oz_id>", methods=["PUT"])
+@admin_erforderlich
 def api_oeffnungszeit_update(oz_id):
     oz = Oeffnungszeit.query.get_or_404(oz_id)
     data = request.get_json()
@@ -258,6 +302,7 @@ def api_oeffnungszeit_update(oz_id):
 
 
 @app.route("/api/admin/reservierungen", methods=["GET"])
+@admin_erforderlich
 def api_admin_reservierungen():
     datum_str = request.args.get("datum")
     query = Reservierung.query
@@ -287,6 +332,7 @@ def api_admin_reservierungen():
 
 
 @app.route("/api/admin/reservierungen/<int:res_id>", methods=["DELETE"])
+@admin_erforderlich
 def api_admin_reservierung_loeschen(res_id):
     res = Reservierung.query.get_or_404(res_id)
     db.session.delete(res)
@@ -295,6 +341,7 @@ def api_admin_reservierung_loeschen(res_id):
 
 
 @app.route("/api/admin/tische", methods=["GET"])
+@admin_erforderlich
 def api_admin_tische():
     tische = Tisch.query.order_by(Tisch.nummer).all()
     return jsonify([
@@ -304,6 +351,7 @@ def api_admin_tische():
 
 
 @app.route("/api/admin/tische", methods=["POST"])
+@admin_erforderlich
 def api_admin_tisch_erstellen():
     """Erstellt einen neuen Tisch."""
     data = request.get_json()
@@ -335,6 +383,7 @@ def api_admin_tisch_erstellen():
 
 
 @app.route("/api/admin/tische/<int:tisch_id>", methods=["PUT"])
+@admin_erforderlich
 def api_admin_tisch_update(tisch_id):
     """Aktualisiert einen Tisch (Nummer und/oder Plätze)."""
     tisch = Tisch.query.get_or_404(tisch_id)
@@ -355,6 +404,7 @@ def api_admin_tisch_update(tisch_id):
 
 
 @app.route("/api/admin/tische/<int:tisch_id>", methods=["DELETE"])
+@admin_erforderlich
 def api_admin_tisch_loeschen(tisch_id):
     """Löscht einen Tisch (nur wenn keine Reservierungen vorhanden)."""
     tisch = Tisch.query.get_or_404(tisch_id)
