@@ -10,7 +10,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///reservierungen.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get("SECRET_KEY", "dev-schluessel-bitte-aendern")
 
 db = SQLAlchemy(app)
 
