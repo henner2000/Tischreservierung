@@ -146,7 +146,7 @@
                 return;
             }
 
-            let html = '<table><thead><tr><th>Datum</th><th>Uhrzeit</th><th>Name</th><th>Telefon</th><th>Gäste</th><th>Tisch</th><th></th></tr></thead><tbody>';
+            let html = '<table><thead><tr><th>Datum</th><th>Uhrzeit</th><th>Name</th><th>Telefon</th><th>E-Mail</th><th>Gäste</th><th>Tisch</th><th></th></tr></thead><tbody>';
 
             daten.forEach(r => {
                 html += `<tr>
@@ -154,6 +154,7 @@
                     <td>${r.uhrzeit}</td>
                     <td>${r.name}</td>
                     <td>${r.telefon}</td>
+                    <td>${r.email || ''}</td>
                     <td>${r.gaeste}</td>
                     <td>Nr. ${r.tisch_nummer} (${r.tisch_plaetze}P)</td>
                     <td><button class="btn-small btn-danger" onclick="loescheReservierung(${r.id})">Stornieren</button></td>

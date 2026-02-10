@@ -65,6 +65,10 @@
                         <input type="tel" id="telefon" name="telefon" placeholder="Für Rückfragen" required>
                     </div>
                 </div>
+                <div class="form-group">
+                    <label for="email">E-Mail</label>
+                    <input type="email" id="email" name="email" placeholder="Ihre E-Mail-Adresse" required>
+                </div>
 
                 <button type="submit" id="submitBtn" class="btn-primary" disabled>
                     Tisch reservieren
@@ -192,6 +196,7 @@
             const daten = {
                 name: document.getElementById('name').value,
                 telefon: document.getElementById('telefon').value,
+                email: document.getElementById('email').value,
                 gaeste: parseInt(gaesteSelect.value),
                 datum: datumInput.value,
                 uhrzeit: uhrzeitInput.value,

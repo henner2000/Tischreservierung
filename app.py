@@ -46,6 +46,7 @@ class Reservierung(db.Model):
     tisch_id = db.Column(db.Integer, db.ForeignKey("tisch.id"), nullable=False)
     name = db.Column(db.String(120), nullable=False)
     telefon = db.Column(db.String(30), nullable=False)
+    email = db.Column(db.String(120), nullable=False, default="")
     gaeste = db.Column(db.Integer, nullable=False)
     datum = db.Column(db.Date, nullable=False)
     uhrzeit = db.Column(db.Time, nullable=False)
@@ -165,7 +166,7 @@ def api_reservieren():
     if not data:
         return jsonify({"error": "Keine Daten"}), 400
 
-    required = ["name", "telefon", "gaeste", "datum", "uhrzeit"]
+    required = ["name", "telefon", "email", "gaeste", "datum", "uhrzeit"]
     for field in required:
         if field not in data or not data[field]:
             return jsonify({"error": f"Feld '{field}' fehlt"}), 400
@@ -201,6 +202,7 @@ def api_reservieren():
         tisch_id=tisch.id,
         name=data["name"].strip(),
         telefon=data["telefon"].strip(),
+        email=data["email"].strip(),
         gaeste=gaeste,
         datum=tag,
         uhrzeit=slot,
@@ -275,6 +277,7 @@ def api_admin_reservierungen():
             "tisch_plaetze": r.tisch.plaetze,
             "name": r.name,
             "telefon": r.telefon,
+            "email": r.email,
             "gaeste": r.gaeste,
             "datum": r.datum.strftime("%d.%m.%Y"),
             "uhrzeit": r.uhrzeit.strftime("%H:%M"),
