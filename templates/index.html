@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tischreservierung</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Tischreservierung</h1>
+            <p class="subtitle">Reservieren Sie Ihren Tisch in wenigen Schritten</p>
+        </header>
+
+        <form id="reservierungForm">
+            <!-- Schritt 1: Datum & Gäste -->
+            <div class="form-section" id="schritt1">
+                <h2>1. Wann und wie viele?</h2>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="datum">Datum</label>
+                        <input type="date" id="datum" name="datum" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="gaeste">Anzahl Gäste</label>
+                        <select id="gaeste" name="gaeste" required>
+                            <option value="">-- wählen --</option>
+                            <option value="1">1 Person</option>
+                            <option value="2">2 Personen</option>
+                            <option value="3">3 Personen</option>
+                            <option value="4">4 Personen</option>
+                            <option value="5">5 Personen</option>
+                            <option value="6">6 Personen</option>
+                            <option value="7">7 Personen</option>
+                            <option value="8">8 Personen</option>
+                            <option value="9">9 Personen</option>
+                            <option value="10">10 Personen</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schritt 2: Uhrzeit -->
+            <div class="form-section hidden" id="schritt2">
+                <h2>2. Uhrzeit wählen</h2>
+                <div id="slotsContainer">
+                    <p class="loading">Verfügbare Zeiten werden geladen...</p>
+                </div>
+                <input type="hidden" id="uhrzeit" name="uhrzeit">
+                <div id="verfuegbarkeitStatus" class="hidden"></div>
+            </div>
+
+            <!-- Schritt 3: Kontaktdaten -->
+            <div class="form-section hidden" id="schritt3">
+                <h2>3. Kontaktdaten</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">Name</label>
+                        <input type="text" id="name" name="name" placeholder="Ihr Name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="telefon">Telefon</label>
+                        <input type="tel" id="telefon" name="telefon" placeholder="Für Rückfragen" required>
+                    </div>
+                </div>
+
+                <button type="submit" id="submitBtn" class="btn-primary" disabled>
+                    Tisch reservieren
+                </button>
+            </div>
+        </form>
+
+        <!-- Ergebnis -->
+        <div id="ergebnis" class="hidden"></div>
+
+        <footer>
+            <a href="/admin">Admin-Bereich</a>
+        </footer>
+    </div>
+
+    <script>
+        const datumInput = document.getElementById('datum');
+        const gaesteSelect = document.getElementById('gaeste');
+        const uhrzeitInput = document.getElementById('uhrzeit');
+        const slotsContainer = document.getElementById('slotsContainer');
+        const verfuegbarkeitStatus = document.getElementById('verfuegbarkeitStatus');
+        const schritt2 = document.getElementById('schritt2');
+        const schritt3 = document.getElementById('schritt3');
+        const submitBtn = document.getElementById('submitBtn');
+        const ergebnis = document.getElementById('ergebnis');
+        const form = document.getElementById('reservierungForm');
+
+        // Mindestdatum = heute
+        const heute = new Date().toISOString().split('T')[0];
+        datumInput.setAttribute('min', heute);
+
+        // Wenn Datum oder Gästeanzahl geändert wird -> Slots laden
+        datumInput.addEventListener('change', ladeSlots);
+        gaesteSelect.addEventListener('change', ladeSlots);
+
+        async function ladeSlots() {
+            const datum = datumInput.value;
+            const gaeste = gaesteSelect.value;
+
+            // Reset
+            uhrzeitInput.value = '';
+            verfuegbarkeitStatus.classList.add('hidden');
+            schritt3.classList.add('hidden');
+            submitBtn.disabled = true;
+
+            if (!datum || !gaeste) {
+                schritt2.classList.add('hidden');
+                return;
+            }
+
+            schritt2.classList.remove('hidden');
+            slotsContainer.innerHTML = '<p class="loading">Verfügbare Zeiten werden geladen...</p>';
+
+            try {
+                const res = await fetch(`/api/slots?datum=${datum}`);
+                const data = await res.json();
+
+                if (data.hinweis) {
+                    slotsContainer.innerHTML = `<p class="hinweis">${data.hinweis}</p>`;
+                    return;
+                }
+
+                if (!data.slots || data.slots.length === 0) {
+                    slotsContainer.innerHTML = '<p class="hinweis">Keine verfügbaren Zeiten an diesem Tag.</p>';
+                    return;
+                }
+
+                slotsContainer.innerHTML = '';
+                const slotGrid = document.createElement('div');
+                slotGrid.className = 'slot-grid';
+
+                data.slots.forEach(slot => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'slot-btn';
+                    btn.textContent = slot + ' Uhr';
+                    btn.addEventListener('click', () => waehleSlot(slot, btn));
+                    slotGrid.appendChild(btn);
+                });
+
+                slotsContainer.appendChild(slotGrid);
+            } catch (err) {
+                slotsContainer.innerHTML = '<p class="fehler">Fehler beim Laden der Zeiten.</p>';
+            }
+        }
+
+        async function waehleSlot(slot, btn) {
+            // Visuell markieren
+            document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            uhrzeitInput.value = slot;
+
+            // Verfügbarkeit prüfen
+            const datum = datumInput.value;
+            const gaeste = gaesteSelect.value;
+
+            verfuegbarkeitStatus.classList.remove('hidden');
+            verfuegbarkeitStatus.className = 'status-loading';
+            verfuegbarkeitStatus.textContent = 'Verfügbarkeit wird geprüft...';
+
+            try {
+                const res = await fetch(`/api/verfuegbarkeit?datum=${datum}&uhrzeit=${slot}&gaeste=${gaeste}`);
+                const data = await res.json();
+
+                if (data.verfuegbar) {
+                    verfuegbarkeitStatus.className = 'status-ok';
+                    verfuegbarkeitStatus.textContent = `Tisch ${data.tisch_nummer} (${data.plaetze} Plätze) ist verfügbar!`;
+                    schritt3.classList.remove('hidden');
+                    submitBtn.disabled = false;
+                } else {
+                    verfuegbarkeitStatus.className = 'status-fehler';
+                    verfuegbarkeitStatus.textContent = data.meldung || 'Kein Tisch verfügbar.';
+                    schritt3.classList.add('hidden');
+                    submitBtn.disabled = true;
+                }
+            } catch (err) {
+                verfuegbarkeitStatus.className = 'status-fehler';
+                verfuegbarkeitStatus.textContent = 'Fehler bei der Prüfung.';
+            }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const daten = {
+                name: document.getElementById('name').value,
+                telefon: document.getElementById('telefon').value,
+                gaeste: parseInt(gaesteSelect.value),
+                datum: datumInput.value,
+                uhrzeit: uhrzeitInput.value,
+            };
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Wird reserviert...';
+
+            try {
+                const res = await fetch('/api/reservieren', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(daten),
+                });
+                const data = await res.json();
+
+                if (data.erfolg) {
+                    ergebnis.className = 'ergebnis-erfolg';
+                    ergebnis.innerHTML = `<h3>Reservierung bestätigt!</h3><p>${data.meldung}</p>`;
+                    form.classList.add('hidden');
+                } else {
+                    ergebnis.className = 'ergebnis-fehler';
+                    ergebnis.innerHTML = `<h3>Reservierung fehlgeschlagen</h3><p>${data.error}</p>`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Tisch reservieren';
+                }
+                ergebnis.classList.remove('hidden');
+            } catch (err) {
+                ergebnis.className = 'ergebnis-fehler';
+                ergebnis.innerHTML = '<h3>Fehler</h3><p>Verbindung fehlgeschlagen.</p>';
+                ergebnis.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Tisch reservieren';
+            }
+        });
+    </script>
+</body>
+</html>

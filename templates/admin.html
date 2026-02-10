@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Tischreservierung</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Admin-Bereich</h1>
+            <p class="subtitle"><a href="/">Zurück zur Reservierung</a></p>
+        </header>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-tab="oeffnungszeiten">Öffnungszeiten</button>
+            <button class="tab" data-tab="reservierungen">Reservierungen</button>
+            <button class="tab" data-tab="tische">Tische</button>
+        </div>
+
+        <!-- Öffnungszeiten -->
+        <div class="tab-content active" id="tab-oeffnungszeiten">
+            <h2>Öffnungszeiten</h2>
+            <div id="oeffnungszeitenListe"></div>
+        </div>
+
+        <!-- Reservierungen -->
+        <div class="tab-content" id="tab-reservierungen">
+            <h2>Reservierungen</h2>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="filterDatum">Datum filtern</label>
+                    <input type="date" id="filterDatum">
+                </div>
+                <div class="form-group" style="align-self: end;">
+                    <button class="btn-secondary" id="alleAnzeigen">Alle anzeigen</button>
+                </div>
+            </div>
+            <div id="reservierungenListe"></div>
+        </div>
+
+        <!-- Tische -->
+        <div class="tab-content" id="tab-tische">
+            <h2>Tischübersicht</h2>
+            <div id="tischeListe"></div>
+        </div>
+    </div>
+
+    <script>
+        // Tab-Navigation
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // --- Öffnungszeiten ---
+        async function ladeOeffnungszeiten() {
+            const res = await fetch('/api/admin/oeffnungszeiten');
+            const daten = await res.json();
+            const container = document.getElementById('oeffnungszeitenListe');
+
+            let html = '<table><thead><tr><th>Tag</th><th>Öffnung</th><th>Schliessung</th><th>Status</th><th></th></tr></thead><tbody>';
+
+            daten.forEach(oz => {
+                html += `<tr>
+                    <td>${oz.wochentag_name}</td>
+                    <td><input type="time" value="${oz.oeffnung}" id="oeffnung-${oz.id}" ${oz.geschlossen ? 'disabled' : ''}></td>
+                    <td><input type="time" value="${oz.schliessung}" id="schliessung-${oz.id}" ${oz.geschlossen ? 'disabled' : ''}></td>
+                    <td>
+                        <label class="toggle">
+                            <input type="checkbox" ${oz.geschlossen ? 'checked' : ''} id="geschlossen-${oz.id}"
+                                onchange="toggleGeschlossen(${oz.id}, this.checked)">
+                            <span>Geschlossen</span>
+                        </label>
+                    </td>
+                    <td><button class="btn-small" onclick="speichereOeffnungszeit(${oz.id})">Speichern</button></td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        window.toggleGeschlossen = function(id, geschlossen) {
+            document.getElementById('oeffnung-' + id).disabled = geschlossen;
+            document.getElementById('schliessung-' + id).disabled = geschlossen;
+        };
+
+        window.speichereOeffnungszeit = async function(id) {
+            const data = {
+                oeffnung: document.getElementById('oeffnung-' + id).value,
+                schliessung: document.getElementById('schliessung-' + id).value,
+                geschlossen: document.getElementById('geschlossen-' + id).checked,
+            };
+
+            const res = await fetch(`/api/admin/oeffnungszeiten/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+
+            if (res.ok) {
+                alert('Gespeichert!');
+            } else {
+                alert('Fehler beim Speichern.');
+            }
+        };
+
+        // --- Reservierungen ---
+        const filterDatum = document.getElementById('filterDatum');
+        filterDatum.addEventListener('change', () => ladeReservierungen(filterDatum.value));
+        document.getElementById('alleAnzeigen').addEventListener('click', () => {
+            filterDatum.value = '';
+            ladeReservierungen();
+        });
+
+        async function ladeReservierungen(datum) {
+            let url = '/api/admin/reservierungen';
+            if (datum) url += `?datum=${datum}`;
+
+            const res = await fetch(url);
+            const daten = await res.json();
+            const container = document.getElementById('reservierungenListe');
+
+            if (daten.length === 0) {
+                container.innerHTML = '<p class="hinweis">Keine Reservierungen gefunden.</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Datum</th><th>Uhrzeit</th><th>Name</th><th>Telefon</th><th>Gäste</th><th>Tisch</th><th></th></tr></thead><tbody>';
+
+            daten.forEach(r => {
+                html += `<tr>
+                    <td>${r.datum}</td>
+                    <td>${r.uhrzeit}</td>
+                    <td>${r.name}</td>
+                    <td>${r.telefon}</td>
+                    <td>${r.gaeste}</td>
+                    <td>Nr. ${r.tisch_nummer} (${r.tisch_plaetze}P)</td>
+                    <td><button class="btn-small btn-danger" onclick="loescheReservierung(${r.id})">Stornieren</button></td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        window.loescheReservierung = async function(id) {
+            if (!confirm('Reservierung wirklich stornieren?')) return;
+
+            const res = await fetch(`/api/admin/reservierungen/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                ladeReservierungen(filterDatum.value || undefined);
+            } else {
+                alert('Fehler beim Stornieren.');
+            }
+        };
+
+        // --- Tische ---
+        async function ladeTische() {
+            const res = await fetch('/api/admin/tische');
+            const daten = await res.json();
+            const container = document.getElementById('tischeListe');
+
+            let html = '<table><thead><tr><th>Tisch Nr.</th><th>Plätze</th></tr></thead><tbody>';
+            daten.forEach(t => {
+                html += `<tr><td>${t.nummer}</td><td>${t.plaetze}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // Initial laden
+        ladeOeffnungszeiten();
+        ladeReservierungen();
+        ladeTische();
+    </script>
+</body>
+</html>
