@@ -300,6 +300,75 @@ def api_admin_tische():
     ])
 
 
+@app.route("/api/admin/tische", methods=["POST"])
+def api_admin_tisch_erstellen():
+    """Erstellt einen neuen Tisch."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Keine Daten"}), 400
+
+    nummer = data.get("nummer", type=None)
+    plaetze = data.get("plaetze", type=None)
+
+    if nummer is None or plaetze is None:
+        return jsonify({"error": "Nummer und Plätze sind erforderlich"}), 400
+
+    try:
+        nummer = int(nummer)
+        plaetze = int(plaetze)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Ungültige Werte"}), 400
+
+    if nummer < 1 or plaetze < 1:
+        return jsonify({"error": "Nummer und Plätze müssen mindestens 1 sein"}), 400
+
+    if Tisch.query.filter_by(nummer=nummer).first():
+        return jsonify({"error": f"Tisch {nummer} existiert bereits"}), 409
+
+    tisch = Tisch(nummer=nummer, plaetze=plaetze)
+    db.session.add(tisch)
+    db.session.commit()
+    return jsonify({"erfolg": True, "id": tisch.id})
+
+
+@app.route("/api/admin/tische/<int:tisch_id>", methods=["PUT"])
+def api_admin_tisch_update(tisch_id):
+    """Aktualisiert einen Tisch (Nummer und/oder Plätze)."""
+    tisch = Tisch.query.get_or_404(tisch_id)
+    data = request.get_json()
+
+    if "nummer" in data:
+        neue_nummer = int(data["nummer"])
+        bestehend = Tisch.query.filter(Tisch.nummer == neue_nummer, Tisch.id != tisch_id).first()
+        if bestehend:
+            return jsonify({"error": f"Tisch {neue_nummer} existiert bereits"}), 409
+        tisch.nummer = neue_nummer
+
+    if "plaetze" in data:
+        tisch.plaetze = int(data["plaetze"])
+
+    db.session.commit()
+    return jsonify({"erfolg": True})
+
+
+@app.route("/api/admin/tische/<int:tisch_id>", methods=["DELETE"])
+def api_admin_tisch_loeschen(tisch_id):
+    """Löscht einen Tisch (nur wenn keine Reservierungen vorhanden)."""
+    tisch = Tisch.query.get_or_404(tisch_id)
+
+    offene = Reservierung.query.filter(
+        Reservierung.tisch_id == tisch_id,
+        Reservierung.datum >= date.today(),
+    ).count()
+
+    if offene > 0:
+        return jsonify({"error": f"Tisch hat noch {offene} zukünftige Reservierung(en). Bitte erst stornieren."}), 409
+
+    db.session.delete(tisch)
+    db.session.commit()
+    return jsonify({"erfolg": True})
+
+
 # --- Datenbank initialisieren ---
 
 

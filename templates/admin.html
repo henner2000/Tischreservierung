@@ -44,6 +44,19 @@
         <!-- Tische -->
         <div class="tab-content" id="tab-tische">
             <h2>Tischübersicht</h2>
+            <div class="form-row" style="margin-bottom: 1rem;">
+                <div class="form-group">
+                    <label for="neueTischNr">Tisch Nr.</label>
+                    <input type="number" id="neueTischNr" min="1" placeholder="z.B. 11">
+                </div>
+                <div class="form-group">
+                    <label for="neuePlaetze">Plätze</label>
+                    <input type="number" id="neuePlaetze" min="1" placeholder="z.B. 4">
+                </div>
+                <div class="form-group" style="align-self: end;">
+                    <button class="btn-small" onclick="tischHinzufuegen()">+ Tisch hinzufügen</button>
+                </div>
+            </div>
             <div id="tischeListe"></div>
         </div>
     </div>
@@ -168,13 +181,80 @@
             const daten = await res.json();
             const container = document.getElementById('tischeListe');
 
-            let html = '<table><thead><tr><th>Tisch Nr.</th><th>Plätze</th></tr></thead><tbody>';
+            if (daten.length === 0) {
+                container.innerHTML = '<p class="hinweis">Keine Tische vorhanden.</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Tisch Nr.</th><th>Plätze</th><th></th><th></th></tr></thead><tbody>';
             daten.forEach(t => {
-                html += `<tr><td>${t.nummer}</td><td>${t.plaetze}</td></tr>`;
+                html += `<tr>
+                    <td><input type="number" value="${t.nummer}" min="1" id="tischNr-${t.id}" style="width:70px"></td>
+                    <td><input type="number" value="${t.plaetze}" min="1" id="tischPl-${t.id}" style="width:70px"></td>
+                    <td><button class="btn-small" onclick="tischSpeichern(${t.id})">Speichern</button></td>
+                    <td><button class="btn-small btn-danger" onclick="tischLoeschen(${t.id}, ${t.nummer})">Löschen</button></td>
+                </tr>`;
             });
             html += '</tbody></table>';
             container.innerHTML = html;
         }
+
+        window.tischHinzufuegen = async function() {
+            const nummer = document.getElementById('neueTischNr').value;
+            const plaetze = document.getElementById('neuePlaetze').value;
+
+            if (!nummer || !plaetze) {
+                alert('Bitte Tischnummer und Plätze eingeben.');
+                return;
+            }
+
+            const res = await fetch('/api/admin/tische', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nummer: parseInt(nummer), plaetze: parseInt(plaetze) }),
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('neueTischNr').value = '';
+                document.getElementById('neuePlaetze').value = '';
+                ladeTische();
+            } else {
+                alert(data.error || 'Fehler beim Hinzufügen.');
+            }
+        };
+
+        window.tischSpeichern = async function(id) {
+            const nummer = document.getElementById('tischNr-' + id).value;
+            const plaetze = document.getElementById('tischPl-' + id).value;
+
+            const res = await fetch(`/api/admin/tische/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nummer: parseInt(nummer), plaetze: parseInt(plaetze) }),
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                alert('Tisch gespeichert!');
+                ladeTische();
+            } else {
+                alert(data.error || 'Fehler beim Speichern.');
+            }
+        };
+
+        window.tischLoeschen = async function(id, nummer) {
+            if (!confirm(`Tisch ${nummer} wirklich löschen?`)) return;
+
+            const res = await fetch(`/api/admin/tische/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+
+            if (res.ok) {
+                ladeTische();
+            } else {
+                alert(data.error || 'Fehler beim Löschen.');
+            }
+        };
 
         // Initial laden
         ladeOeffnungszeiten();
